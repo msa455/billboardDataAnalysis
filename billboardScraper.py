@@ -11,7 +11,13 @@ import os
 import datetime
 import time
 import pandas as pd
+from lyricsgenius import Genius
+import readability
 
+
+
+token = "INSERT_GENIUS_API_KEY_HERE"
+genius = Genius(token)
 
 
 weeks = ["2021-05-29", "2021-05-22", "2021-05-15"]
@@ -74,12 +80,82 @@ def makeCSV(outputFile):
             time.sleep(2)
 
 
+def stripLyrics(lyrics):
+    lyrics = lyrics.split("\n")
+    lastLine = lyrics[-1].split(" ")
+    if("URLCopyEmbedCopy") in lastLine:
+        lastLine = lastLine[:-2]
+        lyrics[-1] = " ".join(lastLine)
+
+    cleanedLyrics = []
+    for line in lyrics:
+        if("[" not in line):
+            cleanedLyrics.append(line)
+    return "\n".join(cleanedLyrics)
+
+def getLyrics(title,artist):
+    song = genius.search_song(title,artist)
+    if hasattr(song, "lyrics"):
+        return stripLyrics(song.lyrics)
+    else:
+        print("no lyrics found")
+        song = genius.search_song(title)
+        try:
+            return stripLyrics(song.lyrics)
+        except AttributeError:
+            return False
+
+def getReadingLevels(text):
+    result = readability.getmeasures(text, lang="en")
+    levels = []
+    for item in result["readability grades"]:
+        levels.append(result["readability grades"][item])
+    return levels
+
+
+#getReadingLevels(getLyrics("Good 4 U","Olivia Rodrigo"))
+
+def compileReadingLevels(infile, outfile):
+    with open(infile, "r") as readFile:
+        with open(outfile, "w") as writeFile:
+            #these are the levels for the different tests, they are in the following order:
+            #Flesch Kincaid Grade Level, ARI, Coleman-Liau, FleschReadingEase, GunningFOG
+            #LIX, SMOGindex, RIX, DaleChallIndex
+            gradesTotal = [0,0,0,0,0,0,0,0,0]
+            numEntries = 0
+            curDate = readFile.readline().split(",")[0]
+            
+            for index,line in enumerate(readFile):
+                line = line.split(",")
+                lyrics = getLyrics(line[1],line[2])
+                if(lyrics):
+                    if(line[0] == curDate):
+                        levels = getReadingLevels(lyrics)
+                        for x in range(len(levels)):
+                            gradesTotal[x] += levels[x]
+                        numEntries += 1
+                    else:
+                        gradesAvg = [grade / numEntries for grade in gradesTotal]
+                        gradesString = ",".join(gradesAvg)
+                        toWrite = str(curDate) + "," + gradesString + "\n"
+                        writeFile.write(toWrite)
+                        gradesTotal = [0,0,0,0,0,0,0,0,0]
+                        numEntries = 0
+                        curDate = line[0]
+                else:
+                    pass
+                
     
+
+#print(getReadingLevels(getLyrics("Good 4 U","Olivia Rodrigo")))
+compileReadingLevels(outputFile,"readingLevels.csv")
+#print(getLyrics("Leave The Door Open", "Silk Sonic (Bruno Mars &amp; Anderson .Paak)"))
+
 #print(getSongNames(str(songNames[0])))
 
 
 #makeCSV(outputFile)
 
-df = pd.read_csv("test.csv")
+#df = pd.read_csv("test.csv")
 
 #print(df.tail(1))
